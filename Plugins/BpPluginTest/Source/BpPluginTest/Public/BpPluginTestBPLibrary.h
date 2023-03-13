@@ -6,9 +6,12 @@
  // Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
+#include "RenderGraph.h"
+
 #include "CoreMinimal.h"
 #include "UObject/ObjectMacros.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
+#include "ShaderParameterMacros.h"
 #include "BpPluginTestBPLibrary.generated.h"
 
 /*
@@ -28,6 +31,28 @@
 *	For more info on custom blueprint nodes visit documentation:
 *	https://wiki.unrealengine.com/Custom_Blueprint_Node_Creation
 */
+// 声明一个结构体用来设置uniform buffer
+USTRUCT(BlueprintType, meta = (ScriptName = "FMyShaderStructData"))
+struct FMyShaderStructData
+{
+	GENERATED_USTRUCT_BODY()
+
+		UPROPERTY(BlueprintReadWrite, VisibleAnywhere, meta = (WorldContext = "WorldContextObject"))
+		FLinearColor Color1;
+
+	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, meta = (WorldContext = "WorldContextObject"))
+		FLinearColor Color2;
+
+	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, meta = (WorldContext = "WorldContextObject"))
+		FLinearColor Color3;
+
+	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, meta = (WorldContext = "WorldContextObject"))
+		FLinearColor Color4;
+
+	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, meta = (WorldContext = "WorldContextObject"))
+		int32 ColorIndex;
+};
+
 UCLASS(MinimalAPI)
 class UBpPluginTestBPLibrary: public UBlueprintFunctionLibrary
 {
@@ -35,11 +60,16 @@ class UBpPluginTestBPLibrary: public UBlueprintFunctionLibrary
 
 		UFUNCTION(BlueprintCallable, meta = (DisplayName = "BpPluginTestSampleFunction", WorldContext = "WorldContextObject", Keywords = "BpPluginTest sample test testing"), Category = "BpPluginTestTesting")
 		static void BpPluginTestSampleFunction(
-			const UObject* WorldContextObject, 
-			UTextureRenderTarget2D* OutputRenderTarget, 
+			const UObject* WorldContextObject,
+			UTextureRenderTarget2D* OutputRenderTarget,
 			FLinearColor MyColor,
-			UTexture2D* MyTexture);
+			UTexture2D* MyTexture,
+			FMyShaderStructData MyParameter
+		);
 };
+
+
+
 /*
  * 	Common Resource
  */

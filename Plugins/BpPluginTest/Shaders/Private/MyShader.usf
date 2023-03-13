@@ -1,9 +1,12 @@
 // Copyright 1998-2018 Epic Games, Inc. All Rights Reserved.
-
-
 #include "/Engine/Public/Platform.ush"
+
+//虚幻考虑到优化和跨平台，所以会帮我们封装然后生成这个UniformBuffer的HLSL代码，我们在shader里直接调用即可。但是虚幻生成的这些HLSL代码是被Common.usf包含的
+#include "/Engine/Private/Common.ush"
+
+
 float4 SimpleColor;
-Texture2D MyTexture;  
+Texture2D MyTexture;
 SamplerState MyTextureSampler;
 
 void MainVS(
@@ -20,10 +23,25 @@ void MainVS(
 }
 
 void MainPS(
-    in float2 UV : TEXCOORD0, 
+    in float2 UV : TEXCOORD0,
     out float4 OutColor : SV_Target0
 )
 {
-    OutColor = float4(MyTexture.Sample(MyTextureSampler, UV.xy).rgb, 1.0f);  
+    OutColor = float4(MyTexture.Sample(MyTextureSampler, UV.xy).rgb, 1.0f);
     OutColor *= SimpleColor;
+    switch (FMyUniform.ColorIndex)
+    {
+    case 0:
+        OutColor *= FMyUniform.Color1;
+        break;
+    case 1:
+        OutColor *= FMyUniform.Color2;
+        break;
+    case 2:
+        OutColor *= FMyUniform.Color3;
+        break;
+    case 3:
+        OutColor *= FMyUniform.Color4;
+        break;
+    }
 }

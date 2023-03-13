@@ -2,7 +2,6 @@
 
 #include "BpPluginTestBPLibrary.h"
 
-
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "GlobalShader.h"
@@ -60,18 +59,12 @@ public:
         FRHICommandListImmediate& RHICmdList,
         const TShaderRHIParamRef ShaderRHI,
         const FLinearColor& MyColor,
-        // 添加变量
+        // 添加贴图
         const FTexture* MyTexture
         )
     {
         SetShaderValue(RHICmdList, ShaderRHI, SimpleColorVal, MyColor);
-        /*SetTextureParameter(
-            RHICmdList,
-            ShaderRHI,
-            TestTextureVal,
-            TestTextureSampler,
-            TStaticSamplerState<SF_Trilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI(),
-            MyTexture);*/
+        // 此处设置传入的贴图
         SetTextureParameter(RHICmdList, ShaderRHI, TestTextureVal, TestTextureSampler, MyTexture);
     }
 
@@ -125,24 +118,33 @@ IMPLEMENT_SHADER_TYPE(, FMyGlobalShaderVS, TEXT("/Plugin/BpPluginTest/Private/My
 IMPLEMENT_SHADER_TYPE(, FMyGlobalShaderPS, TEXT("/Plugin/BpPluginTest/Private/MyShader.usf"), TEXT("MainPS"), SF_Pixel)
 
 
-//struct FTextureVertex
-//{
-//public:
-//    FVector4 Position;
-//    FVector2D UV;
-//};
+//! 把下列代码放入.h文件中会报“重定义”的错误
+//! UniformBuffer的声明方法每个引擎的版本都在变，其实如果发现声明方法变了我们可以去看引擎自己是怎么写的就好了
+BEGIN_GLOBAL_SHADER_PARAMETER_STRUCT(FMyUniformStructData, )
+SHADER_PARAMETER(FVector4f, Color1)
+SHADER_PARAMETER(FVector4f, Color2)
+SHADER_PARAMETER(FVector4f, Color3)
+SHADER_PARAMETER(FVector4f, Color4)
+SHADER_PARAMETER(uint32, ColorIndex)
+END_GLOBAL_SHADER_PARAMETER_STRUCT()
+// 在Shader中直接使用FMyUniform  
+IMPLEMENT_GLOBAL_SHADER_PARAMETER_STRUCT(FMyUniformStructData, "FMyUniform");
 
 TGlobalResource<FTextureVertexDeclaration> GTextureVertexDeclaration;
 TGlobalResource<FRectangleVertexBuffer> GRectangleVertexBuffer;
 TGlobalResource<FRectangleIndexBuffer> GRectangleIndexBuffer;
+
+
 static void DrawTestShaderRenderTarget_RenderThread(
     FRHICommandListImmediate& RHICmdList,
     FTextureRenderTargetResource* OutTextureRenderTargetResource,
     ERHIFeatureLevel::Type FeatureLevel,
     const FName& TextureRenderTargetName,
     FLinearColor MyColor,
-    // 添加变量
-    FTexture* MyTexture
+    // 添加贴图
+    FTexture* MyTexture,
+    // 添加Uniform buffer
+    FMyShaderStructData MyParameter
 )
 {
     check(IsInRenderingThread());
@@ -190,7 +192,15 @@ static void DrawTestShaderRenderTarget_RenderThread(
         SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit, 0);
 
         // 更新着色器的统一参数。
+        FMyUniformStructData UniformData;
+        UniformData.Color1 = MyParameter.Color1;
+        UniformData.Color2 = MyParameter.Color2;
+        UniformData.Color3 = MyParameter.Color3;
+        UniformData.Color4 = MyParameter.Color4;
+        UniformData.ColorIndex = MyParameter.ColorIndex;
         // 新添加的变量在这里设置
+        //SetUniformBufferParameterImmediate(RHICmdList, PixelShader.GetPixelShader(), PixelShader->GetUniformBufferParameter<FMyUniformStructData>(), UniformData);
+        SetUniformBufferParameterImmediate(RHICmdList, PixelShader.GetPixelShader(), PixelShader->GetUniformBufferParameter<FMyUniformStructData>(), UniformData);
         PixelShader->SetParameters(RHICmdList, PixelShader.GetPixelShader(), MyColor,MyTexture);
 
         RHICmdList.SetStreamSource(0, GRectangleVertexBuffer.VertexBufferRHI, 0);
@@ -202,25 +212,7 @@ static void DrawTestShaderRenderTarget_RenderThread(
             /*StartIndex=*/ 0,
             /*NumPrimitives=*/ 2,
             /*NumInstances=*/ 1);
-        // -------------------------绘制网格-------------------
-        // 创建静态顶点缓冲
-        // FRHIResourceCreateInfo CreateInfo = FRHIResourceCreateInfo(TEXT("VolumeForVoxelize"));;
-        // FVertexBufferRHIRef VertexBufferRHI = RHICreateVertexBuffer(sizeof(FTextureVertex) * 4, BUF_Volatile, CreateInfo);
-        // void* VoidPtr = RHILockVertexBuffer(VertexBufferRHI, 0, sizeof(FTextureVertex) * 4, RLM_WriteOnly);
-
-        // FTextureVertex* Vertices = (FTextureVertex*)VoidPtr;
-        // Vertices[0].Position = FVector4(-1.0f, 1.0f, 0, 1.0f);
-        // Vertices[1].Position = FVector4(1.0f, 1.0f, 0, 1.0f);
-        // Vertices[2].Position = FVector4(-1.0f, -1.0f, 0, 1.0f);
-        // Vertices[3].Position = FVector4(1.0f, -1.0f, 0, 1.0f);
-        // Vertices[0].UV = FVector2D(0, 0);
-        // Vertices[1].UV = FVector2D(1, 0);
-        // Vertices[2].UV = FVector2D(0, 1);
-        // Vertices[3].UV = FVector2D(1, 1);
-        // RHIUnlockVertexBuffer(VertexBufferRHI);
-
-        // RHICmdList.SetStreamSource(0, VertexBufferRHI, 0);
-        // RHICmdList.DrawPrimitive(0, 2, 1);
+        
     }
     RHICmdList.EndRenderPass();
 
@@ -239,8 +231,9 @@ void UBpPluginTestBPLibrary::BpPluginTestSampleFunction(
     const UObject* WorldContextObject,
     UTextureRenderTarget2D* OutputRenderTarget,
     FLinearColor MyColor,
-    // 添加变量
-    UTexture2D* MyTexture)
+    // 添加贴图
+    UTexture2D* MyTexture,
+    FMyShaderStructData MyParameter)
 {
     check(IsInGameThread());
 
@@ -256,11 +249,11 @@ void UBpPluginTestBPLibrary::BpPluginTestSampleFunction(
     // UWorld* World = Ac->GetWorld();
     UWorld* World = WorldContextObject->GetWorld();
     ERHIFeatureLevel::Type FeatureLevel = World->Scene->GetFeatureLevel();
-    // 添加变量
+    // 添加贴图
     FTexture* MyTextureRHI = MyTexture->Resource;
 
     ENQUEUE_RENDER_COMMAND(CaptureCommand)(
-        [MyColor, MyTextureRHI, TextureRenderTargetResource, TextureRenderTargetName, FeatureLevel](FRHICommandListImmediate& RHICmdList)
+        [MyColor, MyTextureRHI, MyParameter, TextureRenderTargetResource, TextureRenderTargetName, FeatureLevel](FRHICommandListImmediate& RHICmdList)
         {
             DrawTestShaderRenderTarget_RenderThread(
                 RHICmdList,
@@ -268,8 +261,10 @@ void UBpPluginTestBPLibrary::BpPluginTestSampleFunction(
                 FeatureLevel,
                 TextureRenderTargetName,
                 MyColor,
-                // 添加变量
-                MyTextureRHI
+                // 添加贴图
+                MyTextureRHI,
+                // 添加uniform buffer
+                MyParameter
                 );
         }
     );
