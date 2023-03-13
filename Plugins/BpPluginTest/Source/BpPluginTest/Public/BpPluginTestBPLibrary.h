@@ -34,7 +34,11 @@ class UBpPluginTestBPLibrary: public UBlueprintFunctionLibrary
 	GENERATED_UCLASS_BODY()
 
 		UFUNCTION(BlueprintCallable, meta = (DisplayName = "BpPluginTestSampleFunction", WorldContext = "WorldContextObject", Keywords = "BpPluginTest sample test testing"), Category = "BpPluginTestTesting")
-		static void BpPluginTestSampleFunction(const UObject* WorldContextObject, UTextureRenderTarget2D* OutputRenderTarget, FLinearColor MyColor);
+		static void BpPluginTestSampleFunction(
+			const UObject* WorldContextObject, 
+			UTextureRenderTarget2D* OutputRenderTarget, 
+			FLinearColor MyColor,
+			UTexture2D* MyTexture);
 };
 /*
  * 	Common Resource

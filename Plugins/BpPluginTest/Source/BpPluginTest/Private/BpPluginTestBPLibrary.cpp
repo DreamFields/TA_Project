@@ -14,6 +14,10 @@
 #include "Logging/MessageLog.h"
 #include "Internationalization/Internationalization.h"
 #include "ShaderCompilerCore.h"
+#include "StaticBoundShaderState.h"  
+
+#include "RHICommandList.h"  
+#include "UniformBuffer.h"  
 
 static const uint32 kGridSubdivisionX = 32;
 static const uint32 kGridSubdivisionY = 16;
@@ -44,15 +48,31 @@ public:
         : FGlobalShader(Initializer)
     {
         SimpleColorVal.Bind(Initializer.ParameterMap, TEXT("SimpleColor"));
+
+        // 在构造函数把新的成员变量和shader里的变量绑定
+        TestTextureVal.Bind(Initializer.ParameterMap, TEXT("MyTexture"));  
+        TestTextureSampler.Bind(Initializer.ParameterMap, TEXT("MyTextureSampler"));
+
     }
 
     template<typename TShaderRHIParamRef>
     void SetParameters(
         FRHICommandListImmediate& RHICmdList,
         const TShaderRHIParamRef ShaderRHI,
-        const FLinearColor& MyColor)
+        const FLinearColor& MyColor,
+        // 添加变量
+        const FTexture* MyTexture
+        )
     {
         SetShaderValue(RHICmdList, ShaderRHI, SimpleColorVal, MyColor);
+        /*SetTextureParameter(
+            RHICmdList,
+            ShaderRHI,
+            TestTextureVal,
+            TestTextureSampler,
+            TStaticSamplerState<SF_Trilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI(),
+            MyTexture);*/
+        SetTextureParameter(RHICmdList, ShaderRHI, TestTextureVal, TestTextureSampler, MyTexture);
     }
 
     //virtual bool Serialize(FArchive& Ar)
@@ -63,8 +83,10 @@ public:
     //}
 
 private:
-
     LAYOUT_FIELD(FShaderParameter, SimpleColorVal);
+    // 加入新的成员变量
+    LAYOUT_FIELD(FShaderResourceParameter, TestTextureVal);
+    LAYOUT_FIELD(FShaderResourceParameter, TestTextureSampler);
 };
 
 
@@ -118,7 +140,9 @@ static void DrawTestShaderRenderTarget_RenderThread(
     FTextureRenderTargetResource* OutTextureRenderTargetResource,
     ERHIFeatureLevel::Type FeatureLevel,
     const FName& TextureRenderTargetName,
-    FLinearColor MyColor
+    FLinearColor MyColor,
+    // 添加变量
+    FTexture* MyTexture
 )
 {
     check(IsInRenderingThread());
@@ -166,7 +190,8 @@ static void DrawTestShaderRenderTarget_RenderThread(
         SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit, 0);
 
         // 更新着色器的统一参数。
-        PixelShader->SetParameters(RHICmdList, PixelShader.GetPixelShader(), MyColor);
+        // 新添加的变量在这里设置
+        PixelShader->SetParameters(RHICmdList, PixelShader.GetPixelShader(), MyColor,MyTexture);
 
         RHICmdList.SetStreamSource(0, GRectangleVertexBuffer.VertexBufferRHI, 0);
         RHICmdList.DrawIndexedPrimitive(
@@ -213,7 +238,9 @@ UBpPluginTestBPLibrary::UBpPluginTestBPLibrary(const FObjectInitializer& ObjectI
 void UBpPluginTestBPLibrary::BpPluginTestSampleFunction(
     const UObject* WorldContextObject,
     UTextureRenderTarget2D* OutputRenderTarget,
-    FLinearColor MyColor)
+    FLinearColor MyColor,
+    // 添加变量
+    UTexture2D* MyTexture)
 {
     check(IsInGameThread());
 
@@ -223,23 +250,27 @@ void UBpPluginTestBPLibrary::BpPluginTestSampleFunction(
         return;
     }
 
-
-
     const FName TextureRenderTargetName = OutputRenderTarget->GetFName();
     FTextureRenderTargetResource* TextureRenderTargetResource = OutputRenderTarget->GameThread_GetRenderTargetResource();
+    
     // UWorld* World = Ac->GetWorld();
     UWorld* World = WorldContextObject->GetWorld();
     ERHIFeatureLevel::Type FeatureLevel = World->Scene->GetFeatureLevel();
+    // 添加变量
+    FTexture* MyTextureRHI = MyTexture->Resource;
 
     ENQUEUE_RENDER_COMMAND(CaptureCommand)(
-        [MyColor, TextureRenderTargetResource, TextureRenderTargetName, FeatureLevel](FRHICommandListImmediate& RHICmdList)
+        [MyColor, MyTextureRHI, TextureRenderTargetResource, TextureRenderTargetName, FeatureLevel](FRHICommandListImmediate& RHICmdList)
         {
             DrawTestShaderRenderTarget_RenderThread(
                 RHICmdList,
                 TextureRenderTargetResource,
                 FeatureLevel,
                 TextureRenderTargetName,
-                MyColor);
+                MyColor,
+                // 添加变量
+                MyTextureRHI
+                );
         }
     );
 }
