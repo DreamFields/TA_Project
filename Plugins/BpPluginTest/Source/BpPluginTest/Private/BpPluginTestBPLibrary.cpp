@@ -75,12 +75,12 @@ public:
         const TShaderRHIParamRef ShaderRHI,
         const FLinearColor& MyColor,
         // 添加贴图
-        const FTexture* MyTexture
+        FTexture2DRHIRef  MyTexture
     )
     {
         SetShaderValue(RHICmdList, ShaderRHI, SimpleColorVal, MyColor);
         // 此处设置传入的贴图
-        SetTextureParameter(RHICmdList, ShaderRHI, TestTextureVal, TestTextureSampler, MyTexture);
+        SetTextureParameter(RHICmdList, ShaderRHI, TestTextureVal, TestTextureSampler, TStaticSamplerState<SF_Trilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI(), MyTexture);
     }
 
     //virtual bool Serialize(FArchive& Ar)
@@ -194,12 +194,12 @@ IMPLEMENT_SHADER_TYPE(, FMyGlobalShaderCS, TEXT("/Plugin/BpPluginTest/Private/My
 // 顶点、像素着色器流程
 static void UseGlobalShaderDraw_RenderThread(
     FRHICommandListImmediate& RHICmdList,
-    FTextureRenderTargetResource* OutTextureRenderTargetResource,
+    FTexture2DRHIRef RenderTargetRHI,
     ERHIFeatureLevel::Type FeatureLevel,
     const FName& TextureRenderTargetName,
     FLinearColor MyColor,
     // 添加贴图
-    FTexture* MyTexture,
+    FTexture2DRHIRef  MyTexture,
     // 添加Uniform buffer
     FMyShaderStructData MyParameter
 )
@@ -214,11 +214,11 @@ static void UseGlobalShaderDraw_RenderThread(
     SCOPED_DRAW_EVENT(RHICmdList, DrawTestShaderRenderTarget_RenderThread);
 #endif
 
-    FRHITexture2D* RenderTargetTexture = OutTextureRenderTargetResource->GetRenderTargetTexture();
+    //FRHITexture2D* RenderTargetTexture = OutTextureRenderTargetResource->GetRenderTargetTexture();
 
-    RHICmdList.Transition(FRHITransitionInfo(RenderTargetTexture, ERHIAccess::SRVMask, ERHIAccess::RTV));
+    RHICmdList.Transition(FRHITransitionInfo(RenderTargetRHI, ERHIAccess::SRVMask, ERHIAccess::RTV));
 
-    FRHIRenderPassInfo RPInfo(RenderTargetTexture, ERenderTargetActions::DontLoad_Store);
+    FRHIRenderPassInfo RPInfo(RenderTargetRHI, ERenderTargetActions::DontLoad_Store);
     RHICmdList.BeginRenderPass(RPInfo, TEXT("DrawTestShader"));
     {
         // 获取着色器。
@@ -340,15 +340,23 @@ void UBpPluginTestBPLibrary::UseGlobalShaderDraw(
         return;
     }
 
-    const FName TextureRenderTargetName = OutputRenderTarget->GetFName();
-    FTextureRenderTargetResource* TextureRenderTargetResource = OutputRenderTarget->GameThread_GetRenderTargetResource();
+    
 
-    // UWorld* World = Ac->GetWorld();
+    //const FName TextureRenderTargetName = OutputRenderTarget->GetFName();
+    //FTextureRenderTargetResource* TextureRenderTargetResource = OutputRenderTarget->GameThread_GetRenderTargetResource();
+
+    //// UWorld* World = Ac->GetWorld();
+    //UWorld* World = WorldContextObject->GetWorld();
+    //ERHIFeatureLevel::Type FeatureLevel = World->Scene->GetFeatureLevel();
+    //// 添加贴图
+    //// FTexture2DRHIRef  MyTextureRHI = MyTexture->GetResource()->TextureRHI->GetTexture2D();
+    //FTexture* MyTextureRHI = MyTexture->Resource;
+
+    FTexture2DRHIRef TextureRenderTargetResource = OutputRenderTarget->GameThread_GetRenderTargetResource()->GetRenderTargetTexture();
+    FTexture2DRHIRef MyTextureRHI = MyTexture->GetResource()->TextureRHI->GetTexture2D();
+    const FName TextureRenderTargetName = OutputRenderTarget->GetFName();
     UWorld* World = WorldContextObject->GetWorld();
     ERHIFeatureLevel::Type FeatureLevel = World->Scene->GetFeatureLevel();
-    // 添加贴图
-    // FTexture2DRHIRef  MyTextureRHI = MyTexture->GetResource()->TextureRHI->GetTexture2D();
-    FTexture* MyTextureRHI = MyTexture->Resource;
 
     ENQUEUE_RENDER_COMMAND(CaptureCommand)(
         [MyColor, MyTextureRHI, MyParameter, TextureRenderTargetResource, TextureRenderTargetName, FeatureLevel](FRHICommandListImmediate& RHICmdList)
