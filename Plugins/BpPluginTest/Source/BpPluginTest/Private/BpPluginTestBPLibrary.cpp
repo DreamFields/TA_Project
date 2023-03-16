@@ -4,17 +4,20 @@
 
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
-#include "GlobalShader.h"
 #include "PipelineStateCache.h"
+
+#include "GlobalShader.h"
+#include "RenderGraphUtils.h"
+#include "RenderTargetPool.h"
 #include "RHIStaticStates.h"
+#include "ShaderParameterUtils.h"
+#include "PixelShaderUtils.h"
 #include "SceneUtils.h"
 #include "SceneInterface.h"
-#include "ShaderParameterUtils.h"
 #include "Logging/MessageLog.h"
 #include "Internationalization/Internationalization.h"
 #include "ShaderCompilerCore.h"
 #include "StaticBoundShaderState.h"  
-
 #include "RHICommandList.h"  
 #include "UniformBuffer.h"  
 
@@ -22,7 +25,8 @@ static const uint32 kGridSubdivisionX = 32;
 static const uint32 kGridSubdivisionY = 16;
 
 #define LOCTEXT_NAMESPACE "BpPluginTest"
-
+DECLARE_STATS_GROUP(TEXT("ExampleComputeShader"), STATGROUP_ExampleComputeShader, STATCAT_Advanced);
+DECLARE_CYCLE_STAT(TEXT("ExampleComputeShader Execute"), STAT_ExampleComputeShader_Execute, STATGROUP_ExampleComputeShader);
 //! 把下列代码放入.h文件中会报“重定义”的错误
 //! UniformBuffer的声明方法每个引擎的版本都在变，其实如果发现声明方法变了我们可以去看引擎自己是怎么写的就好了
 BEGIN_GLOBAL_SHADER_PARAMETER_STRUCT(FMyUniformStructData, )
@@ -83,12 +87,6 @@ public:
         SetTextureParameter(RHICmdList, ShaderRHI, TestTextureVal, TestTextureSampler, TStaticSamplerState<SF_Trilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI(), MyTexture);
     }
 
-    //virtual bool Serialize(FArchive& Ar)
-    //{
-    //    bool bShaderHasOutdatedParameters = FGlobalShader::Serialize(Ar);
-    //    Ar << SimpleColorVal;
-    //    return bShaderHasOutdatedParameters;
-    //}
 
 private:
     LAYOUT_FIELD(FShaderParameter, SimpleColorVal);
@@ -129,66 +127,81 @@ public:
 };
 
 // 注意，计算着色器直接继承FGlobalShader
-class FMyGlobalShaderCS: public FGlobalShader
+//class FMyGlobalShaderCS: public FGlobalShader
+//{
+//    DECLARE_GLOBAL_SHADER(FMyGlobalShaderCS)
+//
+//        static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
+//    {
+//        return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
+//    }
+//
+//    static void ModifyCompilationEnvironment(const FGlobalShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment)
+//    {
+//        FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
+//        OutEnvironment.CompilerFlags.Add(CFLAG_StandardOptimization);
+//    }
+//
+//public:
+//    FMyGlobalShaderCS() {}
+//    FMyGlobalShaderCS(const ShaderMetaType::CompiledShaderInitializerType& Initializer)
+//        : FGlobalShader(Initializer)
+//    {
+//        OutTexture.Bind(Initializer.ParameterMap, TEXT("OutTexture"));
+//    }
+//
+//    void SetParameters(FRHICommandList& RHICmdList, FRHIUnorderedAccessView* InOutUAV, FMyShaderStructData UniformStruct)
+//    {
+//        FRHIComputeShader* ComputeShaderRHI = RHICmdList.GetBoundComputeShader();
+//        if (OutTexture.IsBound())
+//            RHICmdList.SetUAVParameter(ComputeShaderRHI, OutTexture.GetBaseIndex(), InOutUAV);
+//
+//        FMyUniformStructData ShaderStructData;
+//        ShaderStructData.Color1 = UniformStruct.Color1;
+//        ShaderStructData.Color2 = UniformStruct.Color2;
+//        ShaderStructData.Color3 = UniformStruct.Color3;
+//        ShaderStructData.Color4 = UniformStruct.Color4;
+//        ShaderStructData.ColorIndex = UniformStruct.ColorIndex;
+//        //RHICmdList.SetStaticUniformBuffers(ShaderStructData);
+//        SetUniformBufferParameterImmediate(RHICmdList, ComputeShaderRHI, GetUniformBufferParameter<FMyUniformStructData>(), ShaderStructData);
+//    }
+//
+//    void UnbindBuffers(FRHICommandList& RHICmdList)
+//    {
+//        FRHIComputeShader* ComputeShaderRHI = RHICmdList.GetBoundComputeShader();
+//        if (OutTexture.IsBound())
+//            //RHICmdList.SetUAVParameter(ComputeShaderRHI, OutTexture.GetBaseIndex(), FUnorderedAccessViewRHIRef());
+//            RHICmdList.SetUAVParameter(ComputeShaderRHI, OutTexture.GetBaseIndex(), nullptr);
+//    }
+//
+//private:
+//    //用于进行数据交换的RenderTarget(UAC)变量
+//    LAYOUT_FIELD(FShaderResourceParameter, OutTexture);
+//};
+
+// 注意，计算着色器直接继承FGlobalShader
+class FMyRDGGlobalShaderCS: public FGlobalShader
 {
-    DECLARE_GLOBAL_SHADER(FMyGlobalShaderCS)
+public:
+    DECLARE_GLOBAL_SHADER(FMyRDGGlobalShaderCS);
+    SHADER_USE_PARAMETER_STRUCT(FMyRDGGlobalShaderCS, FGlobalShader);
+
+    BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+        SHADER_PARAMETER_STRUCT_REF(FMyUniformStructData, FMyUniform)
+        SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, OutTexture)
+        END_SHADER_PARAMETER_STRUCT()
 
         static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
     {
-        return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
+        return RHISupportsComputeShaders(Parameters.Platform);
     }
-
-    static void ModifyCompilationEnvironment(const FGlobalShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment)
-    {
-        FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
-        OutEnvironment.CompilerFlags.Add(CFLAG_StandardOptimization);
-    }
-
-public:
-    FMyGlobalShaderCS() {}
-    FMyGlobalShaderCS(const ShaderMetaType::CompiledShaderInitializerType& Initializer)
-        : FGlobalShader(Initializer)
-    {
-        OutTexture.Bind(Initializer.ParameterMap, TEXT("OutTexture"));
-    }
-
-    //这里使用了FUnorderedAccessViewRHIParamRef（UAV）类型的形参，用于设定RenderTarget(UAC)。
-    void SetParameters(FRHICommandList& RHICmdList, FRHIUnorderedAccessView* InOutUAV, FMyShaderStructData UniformStruct)
-    {
-        FRHIComputeShader* ComputeShaderRHI = RHICmdList.GetBoundComputeShader();
-        if (OutTexture.IsBound())
-            RHICmdList.SetUAVParameter(ComputeShaderRHI, OutTexture.GetBaseIndex(), InOutUAV);
-
-        FMyUniformStructData ShaderStructData;
-        ShaderStructData.Color1 = UniformStruct.Color1;
-        ShaderStructData.Color2 = UniformStruct.Color2;
-        ShaderStructData.Color3 = UniformStruct.Color3;
-        ShaderStructData.Color4 = UniformStruct.Color4;
-        ShaderStructData.ColorIndex = UniformStruct.ColorIndex;
-
-        SetUniformBufferParameterImmediate(RHICmdList, ComputeShaderRHI, GetUniformBufferParameter<FMyUniformStructData>(), ShaderStructData);
-    }
-
-    //将UAV设置为空
-    void UnbindBuffers(FRHICommandList& RHICmdList)
-    {
-        FRHIComputeShader* ComputeShaderRHI = RHICmdList.GetBoundComputeShader();
-        if (OutTexture.IsBound())
-            RHICmdList.SetUAVParameter(ComputeShaderRHI, OutTexture.GetBaseIndex(), nullptr);
-    }
-private:
-    //用于进行数据交换的RenderTarget(UAC)变量
-    LAYOUT_FIELD(FShaderResourceParameter, OutTexture);
 };
-
 
 IMPLEMENT_SHADER_TYPE(, FMyGlobalShaderVS, TEXT("/Plugin/BpPluginTest/Private/MyShader.usf"), TEXT("MainVS"), SF_Vertex)
 IMPLEMENT_SHADER_TYPE(, FMyGlobalShaderPS, TEXT("/Plugin/BpPluginTest/Private/MyShader.usf"), TEXT("MainPS"), SF_Pixel)
 // 计算着色器的实现
-IMPLEMENT_SHADER_TYPE(, FMyGlobalShaderCS, TEXT("/Plugin/BpPluginTest/Private/MyShader.usf"), TEXT("MainCS"), SF_Compute)
-
-
-
+// IMPLEMENT_SHADER_TYPE(, FMyGlobalShaderCS, TEXT("/Plugin/BpPluginTest/Private/MyShader.usf"), TEXT("MainCS"), SF_Compute)
+IMPLEMENT_SHADER_TYPE(, FMyRDGGlobalShaderCS, TEXT("/Plugin/BpPluginTest/Private/MyShader.usf"), TEXT("MainCS"), SF_Compute)
 
 
 // 顶点、像素着色器流程
@@ -276,41 +289,102 @@ static void UseGlobalShaderDraw_RenderThread(
     //RHICmdList.Transition(FRHITransitionInfo(RenderTargetTexture, ERHIAccess::RTV, ERHIAccess::SRVMask));
 }
 
+void UseRDGComput_RenderThread(
+    FRHICommandListImmediate& RHICmdList,
+    FTexture2DRHIRef  RenderTargetRHI,
+    ERHIFeatureLevel::Type FeatureLevel,
+    const FName& TextureRenderTargetName,
+    FMyShaderStructData MyParameter)
+{
+    check(IsInRenderingThread());
 
-// 计算着色器流程
+    //Create RenderTargetDesc
+    const FRDGTextureDesc& RenderTargetDesc = FRDGTextureDesc::Create2D(RenderTargetRHI->GetSizeXY(), RenderTargetRHI->GetFormat(), FClearValueBinding::Black, TexCreate_RenderTargetable | TexCreate_ShaderResource | TexCreate_UAV);
+
+    TRefCountPtr<IPooledRenderTarget> PooledRenderTarget;
+
+    //RDG Begin
+    FRDGBuilder GraphBuilder(RHICmdList);
+    FRDGTextureRef RDGRenderTarget = GraphBuilder.CreateTexture(RenderTargetDesc, TEXT("RDGRenderTarget"));
+
+    //Setup Parameters
+    FMyUniformStructData StructParameters;
+    StructParameters.Color1 = MyParameter.Color1;
+    StructParameters.Color2 = MyParameter.Color2;
+    StructParameters.Color3 = MyParameter.Color3;
+    StructParameters.Color4 = MyParameter.Color4;
+    StructParameters.ColorIndex = MyParameter.ColorIndex;
+
+    FMyRDGGlobalShaderCS::FParameters* Parameters = GraphBuilder.AllocParameters<FMyRDGGlobalShaderCS::FParameters>();
+    FRDGTextureUAVDesc UAVDesc(RDGRenderTarget);
+    Parameters->FMyUniform = TUniformBufferRef<FMyUniformStructData>::CreateUniformBufferImmediate(StructParameters, UniformBuffer_SingleFrame);
+    Parameters->OutTexture = GraphBuilder.CreateUAV(UAVDesc);
+
+    //Get ComputeShader From GlobalShaderMap
+    // const ERHIFeatureLevel::Type FeatureLevel = GMaxRHIFeatureLevel; //ERHIFeatureLevel::SM5
+    FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(FeatureLevel);
+    TShaderMapRef<FMyRDGGlobalShaderCS> ComputeShader(GlobalShaderMap);
+
+    //Compute Thread Group Count
+    FIntVector ThreadGroupCount(
+        RenderTargetRHI->GetSizeX() / 32,
+        RenderTargetRHI->GetSizeY() / 32,
+        1);
+
+    //ValidateShaderParameters(PixelShader, Parameters);
+    //ClearUnusedGraphResources(PixelShader, Parameters);
+
+    GraphBuilder.AddPass(
+        RDG_EVENT_NAME("RDGCompute"),
+        Parameters,
+        ERDGPassFlags::Compute,
+        [Parameters, ComputeShader, ThreadGroupCount](FRHICommandList& RHICmdList) {
+            FComputeShaderUtils::Dispatch(RHICmdList, ComputeShader, *Parameters, ThreadGroupCount);
+        });
+
+    GraphBuilder.QueueTextureExtraction(RDGRenderTarget, &PooledRenderTarget);
+    GraphBuilder.Execute();
+
+    //Copy Result To RenderTarget Asset
+    RHICmdList.CopyTexture(PooledRenderTarget->GetRenderTargetItem().ShaderResourceTexture, RenderTargetRHI->GetTexture2D(), FRHICopyTextureInfo());
+    //RHICmdList.CopyToResolveTarget(PooledRenderTarget->GetRenderTargetItem().ShaderResourceTexture, RenderTargetRHI->GetTexture2D(), FResolveParams());
+}
+
+// 计算着色器流程，//!未使用RDG，编译可以通过但编辑器无法运行，崩溃
 //void GlobalShaderCompute_RenderThread(
 //    FRHICommandListImmediate& RHICmdList,
-//    FTextureRenderTargetResource* OutputRenderTargetResource,
+//    FTexture2DRHIRef  InTexRenderTargetRHIture,
 //    ERHIFeatureLevel::Type FeatureLevel,
 //    const FName& TextureRenderTargetName,
 //    FMyShaderStructData MyParameter)
 //{
+//
 //    check(IsInRenderingThread());
 //
 //    //为RHICmdList设置ComputeShader
-//    FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(FeatureLevel);
-//    TShaderMapRef<FMyGlobalShaderCS> ComputeShader(GlobalShaderMap);
-//    //RHICmdList.SetComputeShader(ComputeShader.GetComputeShader());
-//    SetComputePipelineState(RHICmdList, ComputeShader.GetComputeShader());
+//    typename FMyGlobalShaderCS::FPermutationDomain PermutationVector;
+//    TShaderMapRef<FMyGlobalShaderCS> ComputeShader(GetGlobalShaderMap(FeatureLevel), PermutationVector);
+//    //RHICmdList.SetComputeShader(RHICmdList.GetBoundComputeShader());
+//    SetComputePipelineState(RHICmdList, RHICmdList.GetBoundComputeShader());
 //
-//    int32 SizeX = OutputRenderTargetResource->GetSizeX();
-//    int32 SizeY = OutputRenderTargetResource->GetSizeY();
+//    FIntPoint Size = InTexRenderTargetRHIture->GetSizeXY();
 //    FRHIResourceCreateInfo CreateInfo(TEXT("GlobalShader_ComputeShader_UAV"));
 //
 //    //设置RenderTarget格式与属性，并以此创建UAC
-//    FTexture* Texture = RHICreateTexture2D(SizeX, SizeY, PF_A32B32G32R32F, 1, 1, TexCreate_ShaderResource | TexCreate_UAV, CreateInfo);
+//    FTexture2DRHIRef  Texture = RHICreateTexture2D(Size.X, Size.Y, PF_A32B32G32R32F, 1, 1, TexCreate_ShaderResource | TexCreate_UAV, CreateInfo);
+//
 //    FUnorderedAccessViewRHIRef TextureUAV = RHICreateUnorderedAccessView(Texture);
 //
 //    //通过自定义函数设置ComputeShader变量=》分发计算任务进行并行运行=》计算完成后解除绑定
 //    ComputeShader->SetParameters(RHICmdList, TextureUAV, MyParameter);
-//    DispatchComputeShader(RHICmdList, ComputeShader, SizeX / 32, SizeY / 32, 1);
+//    DispatchComputeShader(RHICmdList, ComputeShader, Size.X / 32, Size.Y / 32, 1);
 //    ComputeShader->UnbindBuffers(RHICmdList);
 //
 //
-//    //通过PixelShader的渲染函数将计算结果渲染出来
+//    //通过PixelShader的渲染函数将计算结果渲染到RT
 //    UseGlobalShaderDraw_RenderThread(
 //        RHICmdList,
-//        OutputRenderTargetResource,
+//        InTexRenderTargetRHIture,
 //        FeatureLevel,
 //        TextureRenderTargetName,
 //        FLinearColor(),
@@ -340,18 +414,6 @@ void UBpPluginTestBPLibrary::UseGlobalShaderDraw(
         return;
     }
 
-    
-
-    //const FName TextureRenderTargetName = OutputRenderTarget->GetFName();
-    //FTextureRenderTargetResource* TextureRenderTargetResource = OutputRenderTarget->GameThread_GetRenderTargetResource();
-
-    //// UWorld* World = Ac->GetWorld();
-    //UWorld* World = WorldContextObject->GetWorld();
-    //ERHIFeatureLevel::Type FeatureLevel = World->Scene->GetFeatureLevel();
-    //// 添加贴图
-    //// FTexture2DRHIRef  MyTextureRHI = MyTexture->GetResource()->TextureRHI->GetTexture2D();
-    //FTexture* MyTextureRHI = MyTexture->Resource;
-
     FTexture2DRHIRef TextureRenderTargetResource = OutputRenderTarget->GameThread_GetRenderTargetResource()->GetRenderTargetTexture();
     FTexture2DRHIRef MyTextureRHI = MyTexture->GetResource()->TextureRHI->GetTexture2D();
     const FName TextureRenderTargetName = OutputRenderTarget->GetFName();
@@ -376,34 +438,53 @@ void UBpPluginTestBPLibrary::UseGlobalShaderDraw(
     );
 }
 
-//void UBpPluginTestBPLibrary::UseGlobalShaderCompute(
-//    const UObject* WorldContextObject,
-//    UTextureRenderTarget2D* OutputRenderTarget,
-//    FLinearColor MyColor,
-//    UTexture2D* MyTexture,
-//    FMyShaderStructData MyParameter
-//)
-//{
-//    check(IsInGameThread());
-//    FTexture2DRHIRef RenderTargetRHI = OutputRenderTarget->GameThread_GetRenderTargetResource()->GetRenderTargetTexture();
-//    const FName TextureRenderTargetName = OutputRenderTarget->GetFName();
-//    FTextureRenderTargetResource* TextureRenderTargetResource = OutputRenderTarget->GameThread_GetRenderTargetResource();
-//
-//    UWorld* World = WorldContextObject->GetWorld();
-//    ERHIFeatureLevel::Type FeatureLevel = World->Scene->GetFeatureLevel();
-//    // 添加贴图
-//    FTexture2DRHIRef  MyTextureRHI = MyTexture->GetResource()->TextureRHI->GetTexture2D();
-//    ENQUEUE_RENDER_COMMAND(CaptureCommand)(
-//        [RenderTargetRHI, MyParameter](FRHICommandListImmediate& RHICmdList) {
-//            GlobalShaderCompute_RenderThread(
-//                RHICmdList, 
-//                TextureRenderTargetResource,
-//                FeatureLevel,
-//                TextureRenderTargetName,
-//                MyParameter);
-//        });
-//}
+void UBpPluginTestBPLibrary::UseGlobalShaderCompute(
+    const UObject* WorldContextObject,
+    UTextureRenderTarget2D* OutputRenderTarget,
+    FMyShaderStructData MyParameter
+)
+{
+   /* check(IsInGameThread());
+    FTexture2DRHIRef RenderTargetRHI = OutputRenderTarget->GameThread_GetRenderTargetResource()->GetRenderTargetTexture();
+    const FName TextureRenderTargetName = OutputRenderTarget->GetFName();
 
+    UWorld* World = WorldContextObject->GetWorld();
+    ERHIFeatureLevel::Type FeatureLevel = World->Scene->GetFeatureLevel();
+
+    ENQUEUE_RENDER_COMMAND(CaptureCommand)(
+        [RenderTargetRHI, MyParameter, FeatureLevel, TextureRenderTargetName](FRHICommandListImmediate& RHICmdList) {
+            GlobalShaderCompute_RenderThread(
+                RHICmdList,
+                RenderTargetRHI,
+                FeatureLevel,
+                TextureRenderTargetName,
+                MyParameter);
+        });*/
+}
+
+void UBpPluginTestBPLibrary::UseRDGCompute(
+    const UObject* WorldContextObject,
+    UTextureRenderTarget2D* OutputRenderTarget,
+    FMyShaderStructData MyParameter)
+{
+    check(IsInGameThread());
+
+    FTexture2DRHIRef RenderTargetRHI = OutputRenderTarget->GameThread_GetRenderTargetResource()->GetRenderTargetTexture();
+    const FName TextureRenderTargetName = OutputRenderTarget->GetFName();
+
+    UWorld* World = WorldContextObject->GetWorld();
+    ERHIFeatureLevel::Type FeatureLevel = World->Scene->GetFeatureLevel();
+
+    ENQUEUE_RENDER_COMMAND(CaptureCommand)(
+        [RenderTargetRHI, MyParameter, FeatureLevel, TextureRenderTargetName](FRHICommandListImmediate& RHICmdList) {
+            UseRDGComput_RenderThread(
+                RHICmdList,
+                RenderTargetRHI,
+                FeatureLevel,
+                TextureRenderTargetName,
+                MyParameter);
+        });
+}
 
 //PRAGMA_ENABLE_DEPRECATION_WARNINGS
 #undef LOCTEXT_NAMESPACE

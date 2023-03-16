@@ -28,22 +28,22 @@ void MainPS(
 )
 {
     OutColor = float4(MyTexture.Sample(MyTextureSampler, UV.xy).rgb, 1.0f);
-    OutColor *= SimpleColor;
-    switch (FMyUniform.ColorIndex)
-    {
-    case 0:
-        OutColor *= FMyUniform.Color1;
-        break;
-    case 1:
-        OutColor *= FMyUniform.Color2;
-        break;
-    case 2:
-        OutColor *= FMyUniform.Color3;
-        break;
-    case 3:
-        OutColor *= FMyUniform.Color4;
-        break;
-    }
+    // OutColor *= SimpleColor;
+    // switch (FMyUniform.ColorIndex)
+    // {
+    // case 0:
+    //     OutColor *= FMyUniform.Color1;
+    //     break;
+    // case 1:
+    //     OutColor *= FMyUniform.Color2;
+    //     break;
+    // case 2:
+    //     OutColor *= FMyUniform.Color3;
+    //     break;
+    // case 3:
+    //     OutColor *= FMyUniform.Color4;
+    //     break;
+    // }
 }
 
 RWTexture2D<float4> OutTexture; 

@@ -58,7 +58,7 @@ class UBpPluginTestBPLibrary: public UBlueprintFunctionLibrary
 {
 	GENERATED_UCLASS_BODY()
 
-		UFUNCTION(BlueprintCallable, meta = (DisplayName = "UseGlobalShaderDraw", WorldContext = "WorldContextObject", Keywords = "BpPluginTest sample test testing"), Category = "BpPluginTestTesting")
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "UseGlobalShaderDraw", WorldContext = "WorldContextObject", Keywords = "BpPluginTest sample test testing"), Category = "BpPluginTestTesting")
 		static void UseGlobalShaderDraw(
 			const UObject* WorldContextObject,
 			UTextureRenderTarget2D* OutputRenderTarget,
@@ -67,14 +67,18 @@ class UBpPluginTestBPLibrary: public UBlueprintFunctionLibrary
 			FMyShaderStructData MyParameter
 		);
 
-	//UFUNCTION(BlueprintCallable, meta = (DisplayName = "UseGlobalShaderDraw", WorldContext = "WorldContextObject", Keywords = "BpPluginTest sample test testing"), Category = "BpPluginTestTesting")
-	//	static void UseGlobalShaderCompute(
-	//		const UObject* WorldContextObject,
-	//		UTextureRenderTarget2D* OutputRenderTarget,
-	//		FLinearColor MyColor,
-	//		UTexture2D* MyTexture,
-	//		FMyShaderStructData MyParameter
-	//	);
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "UseGlobalShaderCompute", WorldContext = "WorldContextObject", Keywords = "BpPluginTest sample test testing"), Category = "BpPluginTestTesting")
+		static void UseGlobalShaderCompute(
+			const UObject* WorldContextObject,
+			UTextureRenderTarget2D* OutputRenderTarget,
+			FMyShaderStructData MyParameter
+		);
+
+	UFUNCTION(BlueprintCallable, Category = "BpPluginTestTesting", meta = (DisplayName = "UseRDGCompute", WorldContext = "WorldContextObject"))
+		static void UseRDGCompute(
+			const UObject* WorldContextObject, 
+			UTextureRenderTarget2D* OutputRenderTarget, 
+			FMyShaderStructData MyParameter);
 };
 
 
