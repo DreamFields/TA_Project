@@ -9,18 +9,21 @@ RWTexture2D<float4> OutTexture;
 [numthreads(32, 32, 1)]
 void MainCS(uint3 ThreadId : SV_DispatchThreadID)
 {
-    //Set up some variables we are going to need
+    //对于一张1024*1024的纹理，SV_DispatchThreadID为(1024,1024)，对应UV坐标(1,1)；SV_DispatchThreadID为(0,0)对应UV坐标(0,0)。
+    // 已知纹理分辨率Size，SV_DispatchThreadID可得UV = SV_DispatchThreadID / Size 
     float sizeX, sizeY;
     OutTexture.GetDimensions(sizeX, sizeY);
-
     float2 iResolution = float2(sizeX, sizeY);
-    float2 uv = (ThreadId.xy / iResolution.xy) * 50.0f;
-    float iGlobalTime = FMyUniform.Color1.r;
-    // float iGlobalTime = FMyUniform.GlobalTime;
+    float2 UV = (ThreadId.xy / iResolution.xy);
 
+    // 得到系统时间，从BpPluginTest的Actor的事件蓝图中传入
+    float iGlobalTime = FMyUniform.GlobalTime;
+
+    // 频率
+    const float omiga = 50.0f;
+    // 计算高度随时间变化值，存入纹理的r通道，在材质蓝图中采样该通道的值，赋予顶点偏移量即可
     float4 outputColor = float4(0.0f, 0.0f, 0.0f, 1.0);
-    // outputColor.x = 2.0f * pow((sin(uv.x + iGlobalTime) + 1.0f) / 2.0f, 2.5f);
-    outputColor.xyz = float3(sin(uv.x + iGlobalTime), 0, 0);
+    outputColor.x = sin(UV.x * omiga + iGlobalTime);
 
     OutTexture[ThreadId.xy] = outputColor;
 }
