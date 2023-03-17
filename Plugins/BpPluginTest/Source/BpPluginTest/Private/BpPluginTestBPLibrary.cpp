@@ -35,6 +35,7 @@ SHADER_PARAMETER(FVector4f, Color2)
 SHADER_PARAMETER(FVector4f, Color3)
 SHADER_PARAMETER(FVector4f, Color4)
 SHADER_PARAMETER(uint32, ColorIndex)
+SHADER_PARAMETER(float, GlobalTime)
 END_GLOBAL_SHADER_PARAMETER_STRUCT()
 // 在Shader中直接使用FMyUniform  
 IMPLEMENT_GLOBAL_SHADER_PARAMETER_STRUCT(FMyUniformStructData, "FMyUniform");
@@ -201,7 +202,8 @@ IMPLEMENT_SHADER_TYPE(, FMyGlobalShaderVS, TEXT("/Plugin/BpPluginTest/Private/My
 IMPLEMENT_SHADER_TYPE(, FMyGlobalShaderPS, TEXT("/Plugin/BpPluginTest/Private/MyShader.usf"), TEXT("MainPS"), SF_Pixel)
 // 计算着色器的实现
 // IMPLEMENT_SHADER_TYPE(, FMyGlobalShaderCS, TEXT("/Plugin/BpPluginTest/Private/MyShader.usf"), TEXT("MainCS"), SF_Compute)
-IMPLEMENT_SHADER_TYPE(, FMyRDGGlobalShaderCS, TEXT("/Plugin/BpPluginTest/Private/MyShader.usf"), TEXT("MainCS"), SF_Compute)
+// IMPLEMENT_SHADER_TYPE(, FMyRDGGlobalShaderCS, TEXT("/Plugin/BpPluginTest/Private/MyShader.usf"), TEXT("MainCS"), SF_Compute)
+IMPLEMENT_SHADER_TYPE(, FMyRDGGlobalShaderCS, TEXT("/Plugin/BpPluginTest/Private/Ocean.usf"), TEXT("MainCS"), SF_Compute)
 
 
 // 顶点、像素着色器流程
@@ -268,6 +270,7 @@ static void UseGlobalShaderDraw_RenderThread(
         UniformData.Color3 = MyParameter.Color3;
         UniformData.Color4 = MyParameter.Color4;
         UniformData.ColorIndex = MyParameter.ColorIndex;
+        UniformData.GlobalTime = MyParameter.GlobalTime;
         // 新添加的变量在这里设置
         //SetUniformBufferParameterImmediate(RHICmdList, PixelShader.GetPixelShader(), PixelShader->GetUniformBufferParameter<FMyUniformStructData>(), UniformData);
         SetUniformBufferParameterImmediate(RHICmdList, PixelShader.GetPixelShader(), PixelShader->GetUniformBufferParameter<FMyUniformStructData>(), UniformData);
@@ -314,6 +317,7 @@ void UseRDGComput_RenderThread(
     StructParameters.Color3 = MyParameter.Color3;
     StructParameters.Color4 = MyParameter.Color4;
     StructParameters.ColorIndex = MyParameter.ColorIndex;
+    StructParameters.GlobalTime= MyParameter.GlobalTime;
 
     FMyRDGGlobalShaderCS::FParameters* Parameters = GraphBuilder.AllocParameters<FMyRDGGlobalShaderCS::FParameters>();
     FRDGTextureUAVDesc UAVDesc(RDGRenderTarget);

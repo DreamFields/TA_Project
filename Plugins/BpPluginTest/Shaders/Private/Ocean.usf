@@ -1,0 +1,26 @@
+// Copyright 1998-2018 Epic Games, Inc. All Rights Reserved.
+#include "/Engine/Public/Platform.ush"
+
+//虚幻考虑到优化和跨平台，所以会帮我们封装然后生成这个UniformBuffer的HLSL代码，我们在shader里直接调用即可。但是虚幻生成的这些HLSL代码是被Common.usf包含的
+#include "/Engine/Private/Common.ush"
+
+
+RWTexture2D<float4> OutTexture;
+[numthreads(32, 32, 1)]
+void MainCS(uint3 ThreadId : SV_DispatchThreadID)
+{
+    //Set up some variables we are going to need
+    float sizeX, sizeY;
+    OutTexture.GetDimensions(sizeX, sizeY);
+
+    float2 iResolution = float2(sizeX, sizeY);
+    float2 uv = (ThreadId.xy / iResolution.xy) * 50.0f;
+    float iGlobalTime = FMyUniform.Color1.r;
+    // float iGlobalTime = FMyUniform.GlobalTime;
+
+    float4 outputColor = float4(0.0f, 0.0f, 0.0f, 1.0);
+    // outputColor.x = 2.0f * pow((sin(uv.x + iGlobalTime) + 1.0f) / 2.0f, 2.5f);
+    outputColor.xyz = float3(sin(uv.x + iGlobalTime), 0, 0);
+
+    OutTexture[ThreadId.xy] = outputColor;
+}

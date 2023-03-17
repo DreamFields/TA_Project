@@ -51,6 +51,9 @@ struct FMyShaderStructData
 
 	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, meta = (WorldContext = "WorldContextObject"))
 		int32 ColorIndex;
+	
+	 UPROPERTY(BlueprintReadWrite, VisibleAnywhere, meta = (WorldContext = "WorldContextObject"))
+		 float GlobalTime;
 };
 
 UCLASS(MinimalAPI)
