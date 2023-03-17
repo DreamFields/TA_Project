@@ -54,6 +54,9 @@ struct FMyShaderStructData
 	
 	 UPROPERTY(BlueprintReadWrite, VisibleAnywhere, meta = (WorldContext = "WorldContextObject"))
 		 float GlobalTime;
+
+	 UPROPERTY(BlueprintReadWrite, VisibleAnywhere, meta = (WorldContext = "WorldContextObject"))
+		 float WaveLenthScale;
 };
 
 UCLASS(MinimalAPI)

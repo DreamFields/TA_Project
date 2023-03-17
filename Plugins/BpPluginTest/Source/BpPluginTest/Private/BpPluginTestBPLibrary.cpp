@@ -36,6 +36,7 @@ SHADER_PARAMETER(FVector4f, Color3)
 SHADER_PARAMETER(FVector4f, Color4)
 SHADER_PARAMETER(uint32, ColorIndex)
 SHADER_PARAMETER(float, GlobalTime)
+SHADER_PARAMETER(float, WaveLenthScale)
 END_GLOBAL_SHADER_PARAMETER_STRUCT()
 // 在Shader中直接使用FMyUniform  
 IMPLEMENT_GLOBAL_SHADER_PARAMETER_STRUCT(FMyUniformStructData, "FMyUniform");
@@ -318,6 +319,7 @@ void UseRDGComput_RenderThread(
     StructParameters.Color4 = MyParameter.Color4;
     StructParameters.ColorIndex = MyParameter.ColorIndex;
     StructParameters.GlobalTime= MyParameter.GlobalTime;
+    StructParameters.WaveLenthScale = MyParameter.WaveLenthScale;
 
     FMyRDGGlobalShaderCS::FParameters* Parameters = GraphBuilder.AllocParameters<FMyRDGGlobalShaderCS::FParameters>();
     FRDGTextureUAVDesc UAVDesc(RDGRenderTarget);

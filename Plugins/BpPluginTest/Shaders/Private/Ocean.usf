@@ -1,7 +1,7 @@
 // Copyright 1998-2018 Epic Games, Inc. All Rights Reserved.
 #include "/Engine/Public/Platform.ush"
 
-//虚幻考虑到优化和跨平台，所以会帮我们封装然后生成这个UniformBuffer的HLSL代码，我们在shader里直接调用即可。但是虚幻生成的这些HLSL代码是被Common.usf包含的
+//虚幻考虑到优化和跨平台,所以会帮我们封装然后生成这个UniformBuffer的HLSL代码,我们在shader里直接调用即可。但是虚幻生成的这些HLSL代码是被Common.usf包含的
 #include "/Engine/Private/Common.ush"
 
 
@@ -9,21 +9,56 @@ RWTexture2D<float4> OutTexture;
 [numthreads(32, 32, 1)]
 void MainCS(uint3 ThreadId : SV_DispatchThreadID)
 {
-    //对于一张1024*1024的纹理，SV_DispatchThreadID为(1024,1024)，对应UV坐标(1,1)；SV_DispatchThreadID为(0,0)对应UV坐标(0,0)。
-    // 已知纹理分辨率Size，SV_DispatchThreadID可得UV = SV_DispatchThreadID / Size 
+    //对于一张1024*1024的纹理,SV_DispatchThreadID为(1024,1024),对应UV坐标(1,1);SV_DispatchThreadID为(0,0)对应UV坐标(0,0)。
+    // 已知纹理分辨率Size,SV_DispatchThreadID可得UV = SV_DispatchThreadID / Size 
     float sizeX, sizeY;
     OutTexture.GetDimensions(sizeX, sizeY);
     float2 iResolution = float2(sizeX, sizeY);
     float2 UV = (ThreadId.xy / iResolution.xy);
 
-    // 得到系统时间，从BpPluginTest的Actor的事件蓝图中传入
+    // 得到系统时间,从BpPluginTest的Actor的事件蓝图中传入
     float iGlobalTime = FMyUniform.GlobalTime;
 
-    // 频率
-    const float omiga = 50.0f;
-    // 计算高度随时间变化值，存入纹理的r通道，在材质蓝图中采样该通道的值，赋予顶点偏移量即可
-    float4 outputColor = float4(0.0f, 0.0f, 0.0f, 1.0);
-    outputColor.x = sin(UV.x * omiga + iGlobalTime);
+    // // 频率
+    // const float omiga = 50.0f;
+    // // 计算高度随时间变化值,存入纹理的r通道,在材质蓝图中采样该通道的值,赋予顶点偏移量即可
+    // float4 outputColor = float4(0.0f, 0.0f, 0.0f, 1.0);
+    // outputColor.x = sin(UV.x * omiga + iGlobalTime);
+    // OutTexture[ThreadId.xy] = outputColor;
 
-    OutTexture[ThreadId.xy] = outputColor;
+    float4 Output = float4(0.0f, 0.0f, 0.0f, 1.0);
+    const float PI = 3.1415926f;
+    const int wavenum = 5;
+    // 每秒种波峰移动的距离。为了方便，把速度表示成相位常数 φ=S * 2π/L * t
+    float SpeedArray[wavenum] = { 0.05f,0.08f,0.07f,0.06f,0.09f };
+
+    // 振幅Amplitude (A)：从水平面到波峰的高度。
+    float Amplitude[wavenum] = { 0.05f,0.08f,0.07f,0.06f,0.09f };
+
+    // 方向Direction (D)：垂直于波峰沿波前进方向的水平矢量。
+    float2 DirectionArray[wavenum] = { float2(0.5f, 0.5f), float2(-0.3f, -0.7f), float2(0.1, 0.9f), float2(-0.3f, 0.7f), float2(0.4, -0.6f) };
+
+    // 波长
+    float WaveLength[wavenum] = { 1,1.3,0.7,0.5,1.5 };
+
+    // 控制波浪陡度的参数
+    float Steepness[wavenum] = {1.0f,0.8f,0.7f,0.6f,0.9f};
+
+
+    for (int i = 0;i < wavenum;i++) {
+        float2 Di = normalize(DirectionArray[i]);
+        float2 XY = UV;
+        float Wi = 2.0f * PI / (FMyUniform.WaveLenthScale *WaveLength[i]);
+        float FiT = SpeedArray[i] * Wi *  iGlobalTime;
+        float Ai = Amplitude[i];
+        
+        float Qi = Steepness[i]/(Wi*Ai);
+        
+        Output.x += Qi * Ai * Di.x * cos(dot(Wi * Di, XY) + FiT);
+        Output.y += Qi * Ai * Di.y * cos(dot(Wi * Di, XY) + FiT);
+        Output.z += Ai * sin(dot(Wi * Di, XY) + FiT);
+    }
+
+
+    OutTexture[ThreadId.xy] = Output;
 }
