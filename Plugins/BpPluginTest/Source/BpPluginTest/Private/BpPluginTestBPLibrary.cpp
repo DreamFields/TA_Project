@@ -191,6 +191,7 @@ public:
     BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
         SHADER_PARAMETER_STRUCT_REF(FMyUniformStructData, FMyUniform)
         SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, OutTexture)
+        SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, OutNormalTexture)
         END_SHADER_PARAMETER_STRUCT()
 
         static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -296,6 +297,7 @@ static void UseGlobalShaderDraw_RenderThread(
 void UseRDGComput_RenderThread(
     FRHICommandListImmediate& RHICmdList,
     FTexture2DRHIRef  RenderTargetRHI,
+    FTexture2DRHIRef  OutputNormalRHI,
     ERHIFeatureLevel::Type FeatureLevel,
     const FName& TextureRenderTargetName,
     FMyShaderStructData MyParameter)
@@ -304,12 +306,15 @@ void UseRDGComput_RenderThread(
 
     //Create RenderTargetDesc
     const FRDGTextureDesc& RenderTargetDesc = FRDGTextureDesc::Create2D(RenderTargetRHI->GetSizeXY(), RenderTargetRHI->GetFormat(), FClearValueBinding::Black, TexCreate_RenderTargetable | TexCreate_ShaderResource | TexCreate_UAV);
+    const FRDGTextureDesc& OutputNormalRTDesc = FRDGTextureDesc::Create2D(OutputNormalRHI->GetSizeXY(), OutputNormalRHI->GetFormat(), FClearValueBinding::Black, TexCreate_RenderTargetable | TexCreate_ShaderResource | TexCreate_UAV);
 
     TRefCountPtr<IPooledRenderTarget> PooledRenderTarget;
+    TRefCountPtr<IPooledRenderTarget> PooledRenderTarget2;
 
     //RDG Begin
     FRDGBuilder GraphBuilder(RHICmdList);
     FRDGTextureRef RDGRenderTarget = GraphBuilder.CreateTexture(RenderTargetDesc, TEXT("RDGRenderTarget"));
+    FRDGTextureRef NormalRDGRenderTarget = GraphBuilder.CreateTexture(OutputNormalRTDesc, TEXT("NormalRDGRenderTarget"));
 
     //Setup Parameters
     FMyUniformStructData StructParameters;
@@ -325,6 +330,10 @@ void UseRDGComput_RenderThread(
     FRDGTextureUAVDesc UAVDesc(RDGRenderTarget);
     Parameters->FMyUniform = TUniformBufferRef<FMyUniformStructData>::CreateUniformBufferImmediate(StructParameters, UniformBuffer_SingleFrame);
     Parameters->OutTexture = GraphBuilder.CreateUAV(UAVDesc);
+
+
+    FRDGTextureUAVDesc NormalUAVDesc(NormalRDGRenderTarget);
+    Parameters->OutNormalTexture = GraphBuilder.CreateUAV(NormalUAVDesc);
 
     //Get ComputeShader From GlobalShaderMap
     // const ERHIFeatureLevel::Type FeatureLevel = GMaxRHIFeatureLevel; //ERHIFeatureLevel::SM5
@@ -349,11 +358,13 @@ void UseRDGComput_RenderThread(
         });
 
     GraphBuilder.QueueTextureExtraction(RDGRenderTarget, &PooledRenderTarget);
+    GraphBuilder.QueueTextureExtraction(NormalRDGRenderTarget, &PooledRenderTarget2);
     GraphBuilder.Execute();
 
     //Copy Result To RenderTarget Asset
     RHICmdList.CopyTexture(PooledRenderTarget->GetRenderTargetItem().ShaderResourceTexture, RenderTargetRHI->GetTexture2D(), FRHICopyTextureInfo());
-    //RHICmdList.CopyToResolveTarget(PooledRenderTarget->GetRenderTargetItem().ShaderResourceTexture, RenderTargetRHI->GetTexture2D(), FResolveParams());
+    RHICmdList.CopyTexture(PooledRenderTarget2->GetRenderTargetItem().ShaderResourceTexture, OutputNormalRHI->GetTexture2D(), FRHICopyTextureInfo());
+    
 }
 
 // 计算着色器流程，//!未使用RDG，编译可以通过但编辑器无法运行，崩溃
@@ -471,21 +482,24 @@ void UBpPluginTestBPLibrary::UseGlobalShaderCompute(
 void UBpPluginTestBPLibrary::UseRDGCompute(
     const UObject* WorldContextObject,
     UTextureRenderTarget2D* OutputRenderTarget,
+    UTextureRenderTarget2D* OutputNormal,
     FMyShaderStructData MyParameter)
 {
     check(IsInGameThread());
 
     FTexture2DRHIRef RenderTargetRHI = OutputRenderTarget->GameThread_GetRenderTargetResource()->GetRenderTargetTexture();
+    FTexture2DRHIRef OutputNormalRHI = OutputNormal->GameThread_GetRenderTargetResource()->GetRenderTargetTexture();
     const FName TextureRenderTargetName = OutputRenderTarget->GetFName();
 
     UWorld* World = WorldContextObject->GetWorld();
     ERHIFeatureLevel::Type FeatureLevel = World->Scene->GetFeatureLevel();
 
     ENQUEUE_RENDER_COMMAND(CaptureCommand)(
-        [RenderTargetRHI, MyParameter, FeatureLevel, TextureRenderTargetName](FRHICommandListImmediate& RHICmdList) {
+        [RenderTargetRHI, OutputNormalRHI,MyParameter, FeatureLevel, TextureRenderTargetName](FRHICommandListImmediate& RHICmdList) {
             UseRDGComput_RenderThread(
                 RHICmdList,
                 RenderTargetRHI,
+                OutputNormalRHI,
                 FeatureLevel,
                 TextureRenderTargetName,
                 MyParameter);

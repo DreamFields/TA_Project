@@ -84,6 +84,7 @@ class UBpPluginTestBPLibrary: public UBlueprintFunctionLibrary
 		static void UseRDGCompute(
 			const UObject* WorldContextObject, 
 			UTextureRenderTarget2D* OutputRenderTarget, 
+			UTextureRenderTarget2D* OutputNormal,
 			FMyShaderStructData MyParameter);
 };
 

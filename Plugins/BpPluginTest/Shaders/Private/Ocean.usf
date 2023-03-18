@@ -6,6 +6,7 @@
 
 
 RWTexture2D<float4> OutTexture;
+RWTexture2D<float4> OutNormalTexture;
 [numthreads(32, 32, 1)]
 void MainCS(uint3 ThreadId : SV_DispatchThreadID)
 {
@@ -26,7 +27,7 @@ void MainCS(uint3 ThreadId : SV_DispatchThreadID)
     // outputColor.x = sin(UV.x * omiga + iGlobalTime);
     // OutTexture[ThreadId.xy] = outputColor;
 
-    float4 Output = float4(0.0f, 0.0f, 0.0f, 1.0);
+
     const float PI = 3.1415926f;
     const int wavenum = 5;
     // 每秒种波峰移动的距离。为了方便，把速度表示成相位常数 φ=S * 2π/L * t
@@ -39,26 +40,51 @@ void MainCS(uint3 ThreadId : SV_DispatchThreadID)
     float2 DirectionArray[wavenum] = { float2(0.5f, 0.5f), float2(-0.3f, -0.7f), float2(0.1, 0.9f), float2(-0.3f, 0.7f), float2(0.4, -0.6f) };
 
     // 波长
-    float WaveLength[wavenum] = { 1,1.3,0.7,0.5,1.5 };
+    float WaveLength[wavenum] = { 2,1.3,1.7,1.5,2.5 };
 
     // 控制波浪陡度的参数
-    float Steepness[wavenum] = {1.0f,0.8f,0.7f,0.6f,0.9f};
+    float Steepness[wavenum] = { 1.0f,0.8f,0.7f,0.6f,0.9f };
 
-
+    float4 Output = float4(0.0f, 0.0f, 0.0f, 1.0);
+    float3 T = float3(1.0f, 0.0f, 0.0f);
+    float3 B = float3(0.0f, 1.0f, 0.0f);
+    float3 OutputMormal = float3(0.0f, 0.0f, 0.0f);
     for (int i = 0;i < wavenum;i++) {
         float2 Di = normalize(DirectionArray[i]);
         float2 XY = UV;
-        float Wi = 2.0f * PI / (FMyUniform.WaveLenthScale *WaveLength[i]);
-        float FiT = SpeedArray[i] * Wi *  iGlobalTime;
+        float Wi = 2.0f * PI / (FMyUniform.WaveLenthScale * WaveLength[i]);
+        float FiT = SpeedArray[i] * Wi * iGlobalTime;
         float Ai = Amplitude[i];
-        
-        float Qi = Steepness[i]/(Wi*Ai);
-        
-        Output.x += Qi * Ai * Di.x * cos(dot(Wi * Di, XY) + FiT);
-        Output.y += Qi * Ai * Di.y * cos(dot(Wi * Di, XY) + FiT);
-        Output.z += Ai * sin(dot(Wi * Di, XY) + FiT);
+
+        float Qi = Steepness[i] / (Wi * Ai);
+        // float Qi = Steepness[i];
+
+        float cosVal = cos(dot(Wi * Di, XY) + FiT);
+        float sinVal = sin(dot(Wi * Di, XY) + FiT);
+
+        Output.x += Qi * Ai * Di.x * cosVal;
+        Output.y += Qi * Ai * Di.y * cosVal;
+        Output.z += Ai * sinVal;
+
+        float WA = Wi * Ai;
+
+        T.x -= Qi * WA * Di.x * Di.x * sinVal;
+        T.y -= Qi * WA * Di.x * Di.y * sinVal;
+        T.z += WA * Di.x * cosVal;
+
+        B.x -= Qi * WA * Di.x * Di.y * sinVal;
+        B.y -= Qi * WA * Di.y * Di.y * sinVal;
+        B.z += WA * Di.y * cosVal;
+
+        // OutputMormal.x+=Di.x*Wi*Ai*cosVal;
+        // OutputMormal.y+=Di.y*Wi*Ai*cosVal;
+        // OutputMormal.z-=Qi*Wi*Ai*sinVal;
     }
 
 
     OutTexture[ThreadId.xy] = Output;
+
+    OutputMormal = cross(normalize(T), normalize(B));
+
+    OutNormalTexture[ThreadId.xy] = float4(OutputMormal, 1.0);
 }
