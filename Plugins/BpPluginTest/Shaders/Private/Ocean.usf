@@ -43,7 +43,7 @@ void MainCS(uint3 ThreadId : SV_DispatchThreadID)
     float WaveLength[wavenum] = { 2,1.3,1.7,1.5,2.5 };
 
     // 控制波浪陡度的参数
-    float Steepness[wavenum] = { 1.0f,0.8f,0.7f,0.6f,0.9f };
+    float Steepness[wavenum] = { 0.6f,0.8f,0.7f,0.6f,0.9f };
 
     float4 Output = float4(0.0f, 0.0f, 0.0f, 1.0);
     float3 T = float3(1.0f, 0.0f, 0.0f);
