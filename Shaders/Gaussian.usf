@@ -1,0 +1,40 @@
+static const int SceneTextureId = 14; // 这个索引值表示 Post Process Input 0.
+float2 TexelSize = View.ViewSizeAndInvSize.zw; // 保存纹素大小，用于将偏移量转换到UV空间
+float2 UV = GetDefaultSceneTextureUV(Parameters, SceneTextureId); // 获得当前像素的UV坐标
+float3 PixelSum = float3(0, 0, 0); // 计算卷积核的累加值
+float WeightSum = 0; // 累加卷积核每个像素的权重
+
+// 未拆分形式
+// for (int x = -Radius; x <= Radius; x++)
+// {
+//     for (int y = -Radius; y <= Radius; y++)
+//     {
+//         float2 Offset = UV + float2(x, y) * TexelSize; // 偏移UV坐标
+//         float3 PixelColor = SceneTextureLookup(Offset, SceneTextureId, 0).rgb; // 采样
+
+//         // Calculate1DGaussian在蓝图中的1DGaussian的自定义节点中定义的
+//         float Weight = Calculate1DGaussian(x / Radius) * Calculate1DGaussian(y / Radius);
+
+//         // 累加
+//         PixelSum += PixelColor * Weight;
+//         WeightSum += Weight;
+
+//     }
+// }
+
+// 拆分形式，根据direction是否为0判断当前的模糊方向是水平还是垂直
+// 前提是，在水平模糊后要进行保存，才能进行下一步的垂直模糊。但是由于材质节点中不能保存RT，目前还没有好的方法来拆分
+for (int i = -Radius; i <= Radius; i++)
+{
+    float2 Offset = UV + float2((1-Direction)*i, Direction*i) * TexelSize; // 偏移UV坐标
+    float3 PixelColor = SceneTextureLookup(Offset, SceneTextureId, 0).rgb; // 采样
+
+    // Calculate1DGaussian在蓝图中的1DGaussian的自定义节点中定义的
+    float Weight = Calculate1DGaussian((1-Direction)*i / Radius) * Calculate1DGaussian(Direction*i / Radius);
+
+    // 累加
+    PixelSum += PixelColor * Weight;
+    WeightSum += Weight;
+}
+
+return PixelSum / WeightSum;
